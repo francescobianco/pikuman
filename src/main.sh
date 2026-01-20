@@ -1,5 +1,6 @@
 
 module server
+module repo
 
 main() {
   local pikuman_hosts
@@ -26,7 +27,7 @@ main() {
   done || true
 
   if [ -n "$PIKUMAN_HOSTS" ]; then
-    pikuman_hosts=$WEBUI_CONFIG
+    pikuman_hosts=$PIKUMAN_HOSTS
   elif [ -f "$PWD/.hosts" ]; then
     pikuman_hosts="$PWD/.hosts"
   else
@@ -43,6 +44,9 @@ main() {
       ;;
     server:list)
       pikuman_server_list "$pikuman_hosts"
+      ;;
+    repo:init)
+      pikuman_repo_init "$pikuman_hosts" "$2" "$3"
       ;;
     *)
       echo "Unknown command: $1" 1

@@ -45,17 +45,26 @@ EOF
 pikuman_server_vars() {
   local hosts
   local select_piku_server
+  local piku_server
 
   hosts="$1"
   select_piku_server="$2"
+
+  if [ -z "${select_piku_server}" ]; then
+    echo "Error: No piku_server specified" 1
+    return 1
+  fi
 
   while read -r variables; do
     [ -z "${variables}" ] && continue
     [ "${variables:0:2}" == "##" ] && echo "====[ ${variables:3} ]===="
     [ "${variables:0:5}" != "host=" ] && continue
-    for variable in $variables; do declare "$variable"; done
 
-    if [ "${piku_server}" == "${select_piku_server}" ]; then
+    for variable in $variables; do
+      declare "$variable";
+    done
+
+    if [ "${piku_server}" = "${select_piku_server}" ]; then
       echo "$variables"
       return 0
     fi
