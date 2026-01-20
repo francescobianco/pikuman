@@ -6,6 +6,7 @@ pikuman_server_init() {
   local user
   local host
   local password
+  local public_key
 
   hosts="$1"
   piku_server="$2"
@@ -24,11 +25,20 @@ pikuman_server_init() {
 
   [ -z "${user}" ] && user=$USER
 
+  public_key=$(cat "${HOME}/.ssh/id_rsa.pub")
+
   ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${host}"
 
   sshpass -p "${password}" ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" << EOF
-curl https://piku.github.io/get | sh
-./piku-bootstrap first-run --no-interactive
+export LC_ALL="C.UTF-8"
+rm -fr .piku-bootstrap piku-bootstrap
+echo "Downloading piku-bootstrap here."
+curl -s https://raw.githubusercontent.com/francescobianco/piku-bootstrap/master/piku-bootstrap > piku-bootstrap
+chmod 755 piku-bootstrap
+./piku-bootstrap install
+rm -fr .piku-bootstrap piku-bootstrap
+echo "${public_key}" > /tmp/piku.pub
+sudo -u piku /usr/bin/python3 /home/piku/piku.py setup:ssh /tmp/piku.pub
 EOF
 }
 
