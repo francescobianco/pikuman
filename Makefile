@@ -15,6 +15,8 @@ test-server-list:
 
 test-repo-init:
 	@mush build
+	@rm -fr tests/demo1 || true
+	@git clone https://github.com/francescobianco/piku-demo-php tests/demo1
 	@export PIKUMAN_HOSTS=../../.hosts && \
 		cd tests/demo1 && \
 		../../target/debug/pikuman repo:init server1 demo1 && \
