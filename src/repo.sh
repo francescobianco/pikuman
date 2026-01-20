@@ -1,6 +1,4 @@
 
-module server
-
 pikuman_repo_init() {
   local hosts
   local piku_server
