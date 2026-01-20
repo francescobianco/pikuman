@@ -39,7 +39,7 @@ main() {
 
   case "$1" in
     server:init)
-      pikuman_server_init "$pikuman_hosts"
+      pikuman_server_init "$pikuman_hosts" "$2"
       ;;
     server:list)
       pikuman_server_list "$pikuman_hosts"

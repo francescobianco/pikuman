@@ -5,4 +5,7 @@ push:
 	@git push
 
 test-server-init:
-	@mush run -- server:init
+	@mush run -- server:init server1
+
+test-server-list:
+	@mush run -- server:list
