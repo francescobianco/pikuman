@@ -4,6 +4,9 @@ push:
 	@git commit -am "Updated at $$(date)" || true
 	@git push
 
+install:
+	@mush install --path .
+
 test-server-init:
 	@mush run -- server:init server1
 

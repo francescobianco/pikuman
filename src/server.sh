@@ -83,9 +83,12 @@ pikuman_server_list() {
     [ -z "${variables}" ] && continue
     [ "${variables:0:2}" == "##" ] && echo "====[ ${variables:3} ]===="
     [ "${variables:0:5}" != "host=" ] && continue
+    declare "piku_server="
     for variable in $variables; do
       declare "$variable"
     done
-    echo "${piku_server} (${host})"
+    if [ -n "${piku_server}" ]; then
+      echo "${piku_server} (${host})"
+    fi
   done < "${hosts}"
 }

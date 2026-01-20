@@ -3,7 +3,7 @@
 # @package: pikuman
 # @build_type: bin
 # @build_with: Mush v0.2.0 (2025-05-15 develop)
-# @build_date: 2026-01-20T17:27:22Z
+# @build_date: 2026-01-20T19:42:33Z
 set -e
 use() { return 0; }
 extern() { return 0; }
@@ -14,19 +14,16 @@ embed() { return 0; }
 inject() { return 0; }
 ## BP004: Compile the entrypoint
 
+module server
+module repo
+
 main() {
-  local list
-  local webui_config
-  local webui_token
+  local pikuman_hosts
 
   while [ $# -gt 0 ]; do
     case "$1" in
       -*)
         case "$1" in
-          --list)
-            list=true
-            shift
-            ;;
           -o|--output)
             echo "Handling $1 with value: $2"
             shift
@@ -44,25 +41,12 @@ main() {
     shift
   done || true
 
-  if [ -n "$WEBUI_CONFIG" ]; then
-    webui_config=$WEBUI_CONFIG
-  elif [ -f "$PWD/.webuirc" ]; then
-    webui_config="$PWD/.webuirc"
+  if [ -n "$PIKUMAN_HOSTS" ]; then
+    pikuman_hosts=$PIKUMAN_HOSTS
+  elif [ -f "$PWD/.hosts" ]; then
+    pikuman_hosts="$PWD/.hosts"
   else
-    webui_config="$HOME/.webuirc"
-  fi
-
-  if [ -n "$WEBUI_TOKEN" ]; then
-    webui_token=$WEBUI_CONFIG
-  elif [ -f "$PWD/.webuirc" ]; then
-    webui_token="$PWD/.webuirc"
-  else
-    webui_token="$HOME/.webuirc"
-  fi
-
-  if [ -n "$list" ]; then
-    my_print_list "$hosts"
-    exit
+    pikuman_hosts="$HOME/.hosts"
   fi
 
   if [ "$#" -eq 0 ]; then
@@ -71,12 +55,236 @@ main() {
 
   case "$1" in
     server:init)
-      echo "Initializing server..."
+      pikuman_server_init "$pikuman_hosts" "$2"
+      ;;
+    server:list)
+      pikuman_server_list "$pikuman_hosts"
+      ;;
+    repo:init)
+      pikuman_repo_init "$pikuman_hosts" "$2" "$3"
       ;;
     *)
       echo "Unknown command: $1" 1
       ;;
   esac
+}
+
+pikuman_server_init() {
+  local hosts
+  local piku_server
+  local variables
+  local user
+  local host
+  local password
+  local public_key
+
+  hosts="$1"
+  piku_server="$2"
+  variables=$(pikuman_server_vars "${hosts}" "${piku_server}")
+
+  if [ -z "${variables}" ]; then
+    echo "Error: Server '${piku_server}' not found in hosts file '${hosts}'" 1
+    return 1
+  fi
+
+  echo "Initializing server '${piku_server}' in hosts file '${hosts}'"
+
+  for variable in $variables; do
+    declare "$variable"
+  done
+
+  [ -z "${user}" ] && user=$USER
+
+  public_key=$(cat "${HOME}/.ssh/id_rsa.pub")
+
+  ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${host}"
+
+  sshpass -p "${password}" ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" << EOF
+export LC_ALL="C.UTF-8"
+rm -fr .piku-bootstrap piku-bootstrap
+echo "Downloading piku-bootstrap here."
+curl -s https://raw.githubusercontent.com/francescobianco/piku-bootstrap/master/piku-bootstrap > piku-bootstrap
+chmod 755 piku-bootstrap
+./piku-bootstrap install
+rm -fr .piku-bootstrap piku-bootstrap
+echo "${public_key}" > /tmp/piku.pub
+sudo -u piku /usr/bin/python3 /home/piku/piku.py setup:ssh /tmp/piku.pub
+EOF
+}
+
+pikuman_server_vars() {
+  local hosts
+  local select_piku_server
+  local piku_server
+
+  hosts="$1"
+  select_piku_server="$2"
+
+  if [ -z "${select_piku_server}" ]; then
+    echo "Error: No piku_server specified" 1
+    return 1
+  fi
+
+  while read -r variables; do
+    [ -z "${variables}" ] && continue
+    [ "${variables:0:2}" == "##" ] && echo "====[ ${variables:3} ]===="
+    [ "${variables:0:5}" != "host=" ] && continue
+
+    for variable in $variables; do
+      declare "$variable";
+    done
+
+    if [ "${piku_server}" = "${select_piku_server}" ]; then
+      echo "$variables"
+      return 0
+    fi
+  done < "${hosts}"
+}
+
+pikuman_server_list() {
+  local hosts
+  local variables
+  local piku_server
+  local host
+
+  hosts=$1
+  #echo "Hosts:${hosts}"
+  while read -r variables; do
+    [ -z "${variables}" ] && continue
+    [ "${variables:0:2}" == "##" ] && echo "====[ ${variables:3} ]===="
+    [ "${variables:0:5}" != "host=" ] && continue
+    declare "piku_server="
+    for variable in $variables; do
+      declare "$variable"
+    done
+    if [ -n "${piku_server}" ]; then
+      echo "${piku_server} (${host})"
+    fi
+  done < "${hosts}"
+}
+
+module server
+
+pikuman_repo_init() {
+  local hosts
+  local piku_server
+  local piku_app
+  local variables
+  local host
+
+  hosts="$1"
+  piku_server="$2"
+  piku_app="$3"
+
+  variables=$(pikuman_server_vars "${hosts}" "${piku_server}")
+
+  if [ -z "${variables}" ]; then
+    echo "Error: Server '${piku_server}' not found in hosts file '${hosts}'" 1
+    return 1
+  fi
+
+  echo "Initializing repository: $PWD for app '${piku_app}' on server '${piku_server}' using hosts file '${hosts}'"
+
+  for variable in $variables; do
+    declare "$variable"
+  done
+
+  git remote remove piku >/dev/null 2>&1 || true
+  git remote add piku "piku@${host}:${piku_app}"
+}
+
+pikuman_server_init() {
+  local hosts
+  local piku_server
+  local variables
+  local user
+  local host
+  local password
+  local public_key
+
+  hosts="$1"
+  piku_server="$2"
+  variables=$(pikuman_server_vars "${hosts}" "${piku_server}")
+
+  if [ -z "${variables}" ]; then
+    echo "Error: Server '${piku_server}' not found in hosts file '${hosts}'" 1
+    return 1
+  fi
+
+  echo "Initializing server '${piku_server}' in hosts file '${hosts}'"
+
+  for variable in $variables; do
+    declare "$variable"
+  done
+
+  [ -z "${user}" ] && user=$USER
+
+  public_key=$(cat "${HOME}/.ssh/id_rsa.pub")
+
+  ssh-keygen -f "${HOME}/.ssh/known_hosts" -R "${host}"
+
+  sshpass -p "${password}" ssh -o StrictHostKeyChecking=accept-new "${user}@${host}" << EOF
+export LC_ALL="C.UTF-8"
+rm -fr .piku-bootstrap piku-bootstrap
+echo "Downloading piku-bootstrap here."
+curl -s https://raw.githubusercontent.com/francescobianco/piku-bootstrap/master/piku-bootstrap > piku-bootstrap
+chmod 755 piku-bootstrap
+./piku-bootstrap install
+rm -fr .piku-bootstrap piku-bootstrap
+echo "${public_key}" > /tmp/piku.pub
+sudo -u piku /usr/bin/python3 /home/piku/piku.py setup:ssh /tmp/piku.pub
+EOF
+}
+
+pikuman_server_vars() {
+  local hosts
+  local select_piku_server
+  local piku_server
+
+  hosts="$1"
+  select_piku_server="$2"
+
+  if [ -z "${select_piku_server}" ]; then
+    echo "Error: No piku_server specified" 1
+    return 1
+  fi
+
+  while read -r variables; do
+    [ -z "${variables}" ] && continue
+    [ "${variables:0:2}" == "##" ] && echo "====[ ${variables:3} ]===="
+    [ "${variables:0:5}" != "host=" ] && continue
+
+    for variable in $variables; do
+      declare "$variable";
+    done
+
+    if [ "${piku_server}" = "${select_piku_server}" ]; then
+      echo "$variables"
+      return 0
+    fi
+  done < "${hosts}"
+}
+
+pikuman_server_list() {
+  local hosts
+  local variables
+  local piku_server
+  local host
+
+  hosts=$1
+  #echo "Hosts:${hosts}"
+  while read -r variables; do
+    [ -z "${variables}" ] && continue
+    [ "${variables:0:2}" == "##" ] && echo "====[ ${variables:3} ]===="
+    [ "${variables:0:5}" != "host=" ] && continue
+    declare "piku_server="
+    for variable in $variables; do
+      declare "$variable"
+    done
+    if [ -n "${piku_server}" ]; then
+      echo "${piku_server} (${host})"
+    fi
+  done < "${hosts}"
 }
 ## BP005: Execute the entrypoint
 main "$@"
